@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #378ADD;
+}
+
+body {
+  background-color: #F8F7F4;
+  color: #1a1a1a;
+}
