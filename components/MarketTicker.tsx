@@ -14,7 +14,10 @@ const LABELS: Record<string, string> = {
   "USDJPY=X": "USD/JPY",
 };
 
-function formatPrice(price: number, currency: string): string {
+function formatPrice(price: number, symbol: string, currency: string): string {
+  if (symbol === "USDJPY=X") {
+    return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
   if (currency === "JPY") {
     return price.toLocaleString("ja-JP", { maximumFractionDigits: 0 });
   }
@@ -36,7 +39,7 @@ export default function MarketTicker({ quotes }: { quotes: Quote[] }) {
           >
             <span className="text-xs font-medium text-gray-400">{label}</span>
             <span className="text-sm font-bold text-gray-900 tabular-nums">
-              {formatPrice(q.price, q.currency)}
+              {formatPrice(q.price, q.symbol, q.currency)}
             </span>
             <span
               className={`text-xs font-semibold tabular-nums ${
