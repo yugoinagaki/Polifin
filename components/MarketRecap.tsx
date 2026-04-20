@@ -4,9 +4,9 @@ type Lang = "en" | "ja";
 
 interface MarketRecapData {
   generatedAt: string;
-  sp500: { change: number; changePct: number; recap: string };
-  nikkei225: { change: number; changePct: number; recap: string };
-  usdjpy: { change: number; changePct: number; recap: string };
+  sp500: { changePct: number; recap: string };
+  nikkei225: { changePct: number; recap: string };
+  usdjpy: { changePct: number; recap: string };
 }
 
 interface MarketRecapProps {
@@ -15,28 +15,28 @@ interface MarketRecapProps {
   lang: Lang;
 }
 
-const LABELS: Record<string, Record<Lang, string>> = {
-  sp500: { en: "S&P 500", ja: "S&P 500" },
-  nikkei225: { en: "Nikkei 225", ja: "日経225" },
-  usdjpy: { en: "USD/JPY", ja: "USD/JPY" },
-};
-
 const UI = {
   en: {
     title: "Market Recap",
     subtitle: "Why did markets move today?",
     loading: "Generating AI recap...",
     updated: (t: string) => `Updated ${t}`,
-    cached: "Cached · updates every 6h",
+    note: "Prev. close · updates every 6h",
   },
   ja: {
     title: "マーケットリキャップ",
     subtitle: "今日の市場はなぜ動いたのか",
     loading: "AIがリキャップを生成中...",
     updated: (t: string) => `${t} 更新`,
-    cached: "キャッシュ済み · 6時間毎に更新",
+    note: "前日比 · 6時間毎に更新",
   },
 };
+
+const ROWS: { sym: keyof Omit<MarketRecapData, "generatedAt">; label: Record<Lang, string> }[] = [
+  { sym: "sp500",    label: { en: "S&P 500",    ja: "S&P 500" } },
+  { sym: "nikkei225",label: { en: "Nikkei 225", ja: "日経225" } },
+  { sym: "usdjpy",   label: { en: "USD/JPY",    ja: "USD/JPY" } },
+];
 
 function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString("ja-JP", {
@@ -47,17 +47,17 @@ function formatTime(isoString: string): string {
   });
 }
 
-function MarketRow({ label, data, lang }: { label: string; data: { change: number; changePct: number; recap: string }; lang: Lang }) {
-  const positive = data.changePct >= 0;
+function MarketRow({ label, changePct, recap }: { label: string; changePct: number; recap: string }) {
+  const positive = changePct >= 0;
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
         <span className="text-xs font-semibold text-gray-600">{label}</span>
         <span className={`text-xs font-bold tabular-nums ${positive ? "text-[#3B6D11]" : "text-[#A32D2D]"}`}>
-          {positive ? "▲" : "▼"} {Math.abs(data.changePct).toFixed(2)}%
+          {positive ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
         </span>
       </div>
-      <p className="text-sm text-gray-500 leading-relaxed">{data.recap}</p>
+      <p className="text-sm text-gray-500 leading-relaxed">{recap}</p>
     </div>
   );
 }
@@ -74,9 +74,10 @@ export default function MarketRecap({ data, loading, lang }: MarketRecapProps) {
             <p className="text-xs text-gray-400 mt-0.5">{ui.subtitle}</p>
           </div>
           {data && (
-            <span className="text-xs text-gray-400 mt-0.5 text-right">
-              {ui.updated(formatTime(data.generatedAt))} JST
-            </span>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">{ui.updated(formatTime(data.generatedAt))} JST</p>
+              <p className="text-xs text-gray-300 mt-0.5">{ui.note}</p>
+            </div>
           )}
         </div>
       </div>
@@ -93,11 +94,16 @@ export default function MarketRecap({ data, loading, lang }: MarketRecapProps) {
           </div>
         ) : data ? (
           <div className="space-y-4">
-            <MarketRow label={LABELS.sp500[lang]} data={data.sp500} lang={lang} />
-            <div className="border-t border-gray-50" />
-            <MarketRow label={LABELS.nikkei225[lang]} data={data.nikkei225} lang={lang} />
-            <div className="border-t border-gray-50" />
-            <MarketRow label={LABELS.usdjpy[lang]} data={data.usdjpy} lang={lang} />
+            {ROWS.map(({ sym, label }, i) => (
+              <div key={sym}>
+                {i > 0 && <div className="border-t border-gray-50 mb-4" />}
+                <MarketRow
+                  label={label[lang]}
+                  changePct={data[sym].changePct}
+                  recap={data[sym].recap}
+                />
+              </div>
+            ))}
           </div>
         ) : null}
       </div>

@@ -41,13 +41,6 @@ export default function MarketTicker({ quotes }: { quotes: Quote[] }) {
             <span className="text-sm font-bold text-gray-900 tabular-nums">
               {formatPrice(q.price, q.symbol, q.currency)}
             </span>
-            <span
-              className={`text-xs font-semibold tabular-nums ${
-                positive ? "text-[#3B6D11]" : "text-[#A32D2D]"
-              }`}
-            >
-              {positive ? "▲" : "▼"} {Math.abs(q.changePct).toFixed(2)}%
-            </span>
           </div>
         );
       })}

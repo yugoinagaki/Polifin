@@ -46,9 +46,9 @@ interface Analysis {
 
 interface RecapData {
   generatedAt: string;
-  sp500: { change: number; changePct: number; recap: string };
-  nikkei225: { change: number; changePct: number; recap: string };
-  usdjpy: { change: number; changePct: number; recap: string };
+  sp500: { changePct: number; recap: string };
+  nikkei225: { changePct: number; recap: string };
+  usdjpy: { changePct: number; recap: string };
 }
 
 const UI: Record<Lang, {
