@@ -16,6 +16,7 @@ STEP 2 — ANALYZE each selected article through the following institutional fra
 
 Rules:
 - signal must be exactly one of: "Bullish", "Bearish", or "Neutral"
+- For usdjpy: "Bullish" means USD strengthens (USD/JPY rate rises), "Bearish" means USD weakens / JPY strengthens (USD/JPY rate falls)
 - impactScore must be an integer 1–5:
     1 = Minimal (background noise, unlikely to move markets)
     2 = Low (minor sentiment shift, <0.3% index move expected)
@@ -36,6 +37,7 @@ Response format:
       "title": "<article title>",
       "sp500": { "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "..." },
       "nikkei225": { "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "..." },
+      "usdjpy": { "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "..." },
       "companies": [
         { "name": "Company Name", "ticker": "TICKER or null", "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "..." }
       ]
@@ -56,15 +58,16 @@ const SYSTEM_PROMPT_JA = `あなたは大手マクロヘッジファンドのシ
 
 ルール：
 - signal は必ず "Bullish"、"Bearish"、"Neutral" のいずれか（英語のまま）
+- usdjpy の "Bullish" はドル高（USD/JPYレートが上昇）、"Bearish" はドル安/円高（USD/JPYレートが下落）を意味する
 - impactScore は整数1〜5：
     1 = 極小（マーケットノイズレベル）
-    2 = 小（軽微なセンチメント変化、指数±0.3%未満）
-    3 = 中（注目すべきイベント、指数±0.3〜1%）
-    4 = 大（重大な触媒、指数±1%超の可能性）
-    5 = 極大（システミックショック、歴史的マクロイベント級）
-- reason は日本語で3〜4文。具体的な波及メカニズム（セクター・指標・金融商品）を必ず言及すること
+    2 = 小（軽微なセンチメント変化）
+    3 = 中（注目すべきイベント）
+    4 = 大（重大な触媒）
+    5 = 極大（システミックショック級）
+- reason は日本語で3〜4文。具体的な波及メカニズムを言及すること
 - translatedTitle は記事タイトルの自然な日本語訳
-- ticker：企業の主要取引所ティッカー（例：「NVDA」「7203.T」）、不確かな場合はnull
+- ticker：企業の主要取引所ティッカー、不確かな場合はnull
 - 記事本文に明示的に名前が出ている企業のみ（最大2社）
 - articleIndex：入力リストの0始まりのインデックス
 - 有効なJSONのみで応答。マークダウン・バッククォート・JSON外のテキスト不要。
@@ -78,6 +81,7 @@ const SYSTEM_PROMPT_JA = `あなたは大手マクロヘッジファンドのシ
       "translatedTitle": "<日本語訳>",
       "sp500": { "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "日本語..." },
       "nikkei225": { "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "日本語..." },
+      "usdjpy": { "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "日本語..." },
       "companies": [
         { "name": "企業名", "ticker": "ティッカーまたはnull", "signal": "Bullish|Bearish|Neutral", "impactScore": 1-5, "reason": "日本語..." }
       ]
@@ -123,7 +127,7 @@ export async function POST(req: NextRequest) {
   try {
     const message = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 3000,
+      max_tokens: 3500,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     });

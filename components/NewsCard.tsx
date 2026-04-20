@@ -33,6 +33,7 @@ interface Analysis {
   translatedTitle?: string;
   sp500: MarketSignal;
   nikkei225: MarketSignal;
+  usdjpy: MarketSignal;
   companies: CompanySignal[];
 }
 
@@ -134,6 +135,20 @@ export default function NewsCard({ article, analysis, analysisError, lang, compa
               </div>
               <p className="text-sm text-gray-500 leading-relaxed">{analysis.nikkei225.reason}</p>
             </div>
+
+            {analysis.usdjpy && (
+              <>
+                <div className="border-t border-gray-50 mx-5" />
+                <div className="px-5 py-4">
+                  <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+                    <span className="text-sm font-medium text-gray-600 w-24 shrink-0">USD/JPY</span>
+                    <SignalBadge signal={analysis.usdjpy.signal} lang={lang} />
+                    <ImpactDots score={analysis.usdjpy.impactScore} lang={lang} />
+                  </div>
+                  <p className="text-sm text-gray-500 leading-relaxed">{analysis.usdjpy.reason}</p>
+                </div>
+              </>
+            )}
 
             {/* Companies */}
             {analysis.companies.length > 0 && (

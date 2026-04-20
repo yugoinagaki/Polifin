@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import NewsCard from "@/components/NewsCard";
 import Countdown from "@/components/Countdown";
 import MarketTicker, { Quote } from "@/components/MarketTicker";
+import MarketRecap from "@/components/MarketRecap";
 
 const REFRESH_INTERVAL = 3600;
 
@@ -39,7 +40,15 @@ interface Analysis {
   translatedTitle?: string;
   sp500: MarketSignal;
   nikkei225: MarketSignal;
+  usdjpy: MarketSignal;
   companies: CompanySignal[];
+}
+
+interface RecapData {
+  generatedAt: string;
+  sp500: { change: number; changePct: number; recap: string };
+  nikkei225: { change: number; changePct: number; recap: string };
+  usdjpy: { change: number; changePct: number; recap: string };
 }
 
 const UI: Record<Lang, {
@@ -88,6 +97,11 @@ export default function Home() {
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
   const [marketQuotes, setMarketQuotes] = useState<Quote[]>([]);
   const [companyQuotes, setCompanyQuotes] = useState<Record<string, Quote>>({});
+  const [recap, setRecap] = useState<RecapData | null>(null);
+  const [recapLoading, setRecapLoading] = useState(false);
+
+  const RECAP_CACHE_KEY = "polifin_recap_cache";
+  const RECAP_CACHE_TTL = 6 * 60 * 60 * 1000; // 6h in ms
 
   const lastFetchRef = useRef<number>(0);
   const allArticlesRef = useRef<Article[]>([]); // all 10 fetched
@@ -108,6 +122,34 @@ export default function Home() {
       setCompanyQuotes(cm);
     } catch { /* quotes are non-critical */ }
   }, []);
+
+  const fetchRecap = useCallback(async (language: Lang) => {
+    try {
+      const cacheKey = `${RECAP_CACHE_KEY}_${language}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < RECAP_CACHE_TTL) {
+          setRecap(data);
+          return;
+        }
+      }
+    } catch { /* ignore storage errors */ }
+
+    setRecapLoading(true);
+    try {
+      const res = await fetch(`/api/market-recap?lang=${language}`);
+      if (!res.ok) return;
+      const data: RecapData = await res.json();
+      setRecap(data);
+      try {
+        const cacheKey = `${RECAP_CACHE_KEY}_${language}`;
+        localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
+      } catch { /* ignore storage errors */ }
+    } catch { /* recap is non-critical */ } finally {
+      setRecapLoading(false);
+    }
+  }, [RECAP_CACHE_TTL]);
 
   const runAnalysis = useCallback(async (arts: Article[], language: Lang) => {
     setAnalysisLoading(true);
@@ -204,12 +246,16 @@ export default function Home() {
       setArticles(selectedArticles);
       setAnalyses(cached);
       setAnalysisErrors(analysesErrorsCacheRef.current[newLang] ?? []);
-      return;
+    } else {
+      await runAnalysis(allArticlesRef.current, newLang);
     }
-    await runAnalysis(allArticlesRef.current, newLang);
-  }, [runAnalysis]);
+    fetchRecap(newLang);
+  }, [runAnalysis, fetchRecap]);
 
-  useEffect(() => { fetchAndAnalyze(); }, [fetchAndAnalyze]);
+  useEffect(() => {
+    fetchAndAnalyze();
+    fetchRecap(langRef.current);
+  }, [fetchAndAnalyze, fetchRecap]);
 
   useEffect(() => {
     const interval = setInterval(() => { fetchAndAnalyze(); }, REFRESH_INTERVAL * 1000);
@@ -280,6 +326,11 @@ export default function Home() {
 
         {/* Market Ticker */}
         <MarketTicker quotes={marketQuotes} />
+
+        {/* Daily Market Recap */}
+        {(recap || recapLoading) && (
+          <MarketRecap data={recap} loading={recapLoading} lang={lang} />
+        )}
 
         {/* Content */}
         {newsError ? (
