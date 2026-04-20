@@ -1,17 +1,21 @@
 "use client";
 
 import SignalBadge, { Signal } from "./SignalBadge";
+import { Quote } from "./MarketTicker";
 
 type Lang = "en" | "ja";
 
 interface CompanySignal {
   name: string;
+  ticker: string | null;
   signal: Signal;
+  impactScore: number;
   reason: string;
 }
 
 interface MarketSignal {
   signal: Signal;
+  impactScore: number;
   reason: string;
 }
 
@@ -24,6 +28,7 @@ interface Article {
 }
 
 interface Analysis {
+  articleIndex: number;
   title: string;
   translatedTitle?: string;
   sp500: MarketSignal;
@@ -36,6 +41,7 @@ interface NewsCardProps {
   analysis: Analysis | null;
   analysisError: boolean;
   lang: Lang;
+  companyQuotes: Record<string, Quote>;
 }
 
 function timeAgo(publishedAt: string, lang: Lang): string {
@@ -49,12 +55,40 @@ function timeAgo(publishedAt: string, lang: Lang): string {
   return lang === "ja" ? `${days}日前` : `${days}d ago`;
 }
 
+function ImpactDots({ score, lang }: { score: number; lang: Lang }) {
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div
+          key={i}
+          className={`w-1.5 h-1.5 rounded-full transition-colors ${
+            i <= score ? "bg-gray-500" : "bg-gray-200"
+          }`}
+        />
+      ))}
+      <span className="text-xs text-gray-400 ml-1">
+        {lang === "ja" ? "影響度" : "Impact"}
+      </span>
+    </div>
+  );
+}
+
+function CompanyQuoteChip({ ticker, quote }: { ticker: string | null; quote: Quote | undefined }) {
+  if (!ticker || !quote) return null;
+  const positive = quote.change >= 0;
+  return (
+    <span className={`text-xs font-medium tabular-nums ml-1 ${positive ? "text-[#3B6D11]" : "text-[#A32D2D]"}`}>
+      {positive ? "▲" : "▼"} {Math.abs(quote.changePct).toFixed(2)}%
+    </span>
+  );
+}
+
 const UI = {
   en: { unavailable: "Analysis unavailable" },
   ja: { unavailable: "分析不可" },
 };
 
-export default function NewsCard({ article, analysis, analysisError, lang }: NewsCardProps) {
+export default function NewsCard({ article, analysis, analysisError, lang, companyQuotes }: NewsCardProps) {
   const displayTitle =
     lang === "ja" && analysis?.translatedTitle ? analysis.translatedTitle : article.title;
 
@@ -81,9 +115,10 @@ export default function NewsCard({ article, analysis, analysisError, lang }: New
           <>
             {/* S&P 500 */}
             <div className="px-5 py-4">
-              <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
                 <span className="text-sm font-medium text-gray-600 w-24 shrink-0">S&P 500</span>
                 <SignalBadge signal={analysis.sp500.signal} lang={lang} />
+                <ImpactDots score={analysis.sp500.impactScore} lang={lang} />
               </div>
               <p className="text-sm text-gray-500 leading-relaxed">{analysis.sp500.reason}</p>
             </div>
@@ -92,9 +127,10 @@ export default function NewsCard({ article, analysis, analysisError, lang }: New
 
             {/* Nikkei 225 */}
             <div className="px-5 py-4">
-              <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
                 <span className="text-sm font-medium text-gray-600 w-24 shrink-0">Nikkei 225</span>
                 <SignalBadge signal={analysis.nikkei225.signal} lang={lang} />
+                <ImpactDots score={analysis.nikkei225.impactScore} lang={lang} />
               </div>
               <p className="text-sm text-gray-500 leading-relaxed">{analysis.nikkei225.reason}</p>
             </div>
@@ -108,8 +144,13 @@ export default function NewsCard({ article, analysis, analysisError, lang }: New
                     <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
                       <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                         {company.name}
+                        <CompanyQuoteChip
+                          ticker={company.ticker}
+                          quote={company.ticker ? companyQuotes[company.ticker] : undefined}
+                        />
                       </span>
                       <SignalBadge signal={company.signal} lang={lang} />
+                      <ImpactDots score={company.impactScore} lang={lang} />
                     </div>
                     <p className="text-sm text-gray-500 leading-relaxed">{company.reason}</p>
                   </div>

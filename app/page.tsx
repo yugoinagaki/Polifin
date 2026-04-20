@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import NewsCard from "@/components/NewsCard";
 import Countdown from "@/components/Countdown";
+import MarketTicker, { Quote } from "@/components/MarketTicker";
 
 const REFRESH_INTERVAL = 3600;
 
@@ -20,16 +21,20 @@ type Signal = "Bullish" | "Bearish" | "Neutral";
 
 interface CompanySignal {
   name: string;
+  ticker: string | null;
   signal: Signal;
+  impactScore: number;
   reason: string;
 }
 
 interface MarketSignal {
   signal: Signal;
+  impactScore: number;
   reason: string;
 }
 
 interface Analysis {
+  articleIndex: number;
   title: string;
   translatedTitle?: string;
   sp500: MarketSignal;
@@ -81,11 +86,28 @@ export default function Home() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
+  const [marketQuotes, setMarketQuotes] = useState<Quote[]>([]);
+  const [companyQuotes, setCompanyQuotes] = useState<Record<string, Quote>>({});
 
   const lastFetchRef = useRef<number>(0);
-  const articlesRef = useRef<Article[]>([]);
-  const analysesCacheRef = useRef<Partial<Record<Lang, (Analysis | null)[]>>>({});
+  const allArticlesRef = useRef<Article[]>([]); // all 10 fetched
+  const analysesCacheRef = useRef<Partial<Record<Lang, Analysis[]>>>({});
   const analysesErrorsCacheRef = useRef<Partial<Record<Lang, boolean[]>>>({});
+
+  // Fetch market + company quotes
+  const fetchQuotes = useCallback(async (tickers: string[] = []) => {
+    try {
+      const params = tickers.length > 0 ? `?tickers=${tickers.join(",")}` : "";
+      const res = await fetch(`/api/quotes${params}`);
+      if (!res.ok) return;
+      const data: Quote[] = await res.json();
+      const marketSymbols = new Set(["^GSPC", "^N225", "USDJPY=X"]);
+      setMarketQuotes(data.filter((q) => marketSymbols.has(q.symbol)));
+      const cm: Record<string, Quote> = {};
+      data.filter((q) => !marketSymbols.has(q.symbol)).forEach((q) => { cm[q.symbol] = q; });
+      setCompanyQuotes(cm);
+    } catch { /* quotes are non-critical */ }
+  }, []);
 
   const runAnalysis = useCallback(async (arts: Article[], language: Lang) => {
     setAnalysisLoading(true);
@@ -102,26 +124,39 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("analyze failed");
       const data = await res.json();
+
       if (data.results && Array.isArray(data.results)) {
-        const matched: (Analysis | null)[] = arts.map((_, i) => data.results[i] ?? null);
-        const errors: boolean[] = arts.map((_, i) => !data.results[i]);
-        analysesCacheRef.current[language] = matched;
+        const results: Analysis[] = data.results;
+
+        // Build the 3 selected articles from articleIndex
+        const selectedArticles = results.map((r) => arts[r.articleIndex]).filter(Boolean);
+        setArticles(selectedArticles);
+
+        // Analyses match 1:1 with selectedArticles
+        const matched: (Analysis | null)[] = results.map((r) => r);
+        const errors: boolean[] = results.map(() => false);
+
+        analysesCacheRef.current[language] = results;
         analysesErrorsCacheRef.current[language] = errors;
         setAnalyses(matched);
         setAnalysisErrors(errors);
+
+        // Fetch company stock prices
+        const tickers = results
+          .flatMap((r) => r.companies)
+          .map((c) => c.ticker)
+          .filter((t): t is string => !!t);
+        if (tickers.length > 0) fetchQuotes(tickers);
+
       } else {
-        const errors = arts.map(() => true);
-        analysesErrorsCacheRef.current[language] = errors;
-        setAnalysisErrors(errors);
+        setAnalysisErrors([true, true, true]);
       }
     } catch {
-      const errors = arts.map(() => true);
-      analysesErrorsCacheRef.current[language] = errors;
-      setAnalysisErrors(errors);
+      setAnalysisErrors([true, true, true]);
     } finally {
       setAnalysisLoading(false);
     }
-  }, []);
+  }, [fetchQuotes]);
 
   const fetchAndAnalyze = useCallback(async () => {
     const language = langRef.current;
@@ -135,14 +170,18 @@ export default function Home() {
     lastFetchRef.current = Date.now();
     setCountdown(REFRESH_INTERVAL);
 
+    // Fetch market quotes in parallel with news
+    fetchQuotes();
+
     let fetchedArticles: Article[] = [];
     try {
       const res = await fetch("/api/news");
       if (!res.ok) throw new Error("news fetch failed");
       fetchedArticles = await res.json();
       if (!Array.isArray(fetchedArticles)) throw new Error("bad response");
-      articlesRef.current = fetchedArticles;
-      setArticles(fetchedArticles);
+      allArticlesRef.current = fetchedArticles;
+      // Show skeleton cards while Claude selects
+      setArticles(fetchedArticles.slice(0, 3));
     } catch {
       setNewsError(true);
       setLoading(false);
@@ -152,38 +191,31 @@ export default function Home() {
     setUpdatedAt(new Date());
     setLoading(false);
     await runAnalysis(fetchedArticles, language);
-  }, [runAnalysis]);
+  }, [runAnalysis, fetchQuotes]);
 
   const handleLangChange = useCallback(async (newLang: Lang) => {
     langRef.current = newLang;
     setLang(newLang);
-
-    if (articlesRef.current.length === 0) return;
+    if (allArticlesRef.current.length === 0) return;
 
     const cached = analysesCacheRef.current[newLang];
     if (cached) {
+      const selectedArticles = cached.map((r) => allArticlesRef.current[r.articleIndex]).filter(Boolean);
+      setArticles(selectedArticles);
       setAnalyses(cached);
       setAnalysisErrors(analysesErrorsCacheRef.current[newLang] ?? []);
       return;
     }
-
-    await runAnalysis(articlesRef.current, newLang);
+    await runAnalysis(allArticlesRef.current, newLang);
   }, [runAnalysis]);
 
-  // Initial fetch
-  useEffect(() => {
-    fetchAndAnalyze();
-  }, [fetchAndAnalyze]);
+  useEffect(() => { fetchAndAnalyze(); }, [fetchAndAnalyze]);
 
-  // Auto-refresh every hour
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchAndAnalyze();
-    }, REFRESH_INTERVAL * 1000);
+    const interval = setInterval(() => { fetchAndAnalyze(); }, REFRESH_INTERVAL * 1000);
     return () => clearInterval(interval);
   }, [fetchAndAnalyze]);
 
-  // Countdown ticker
   useEffect(() => {
     const ticker = setInterval(() => {
       const elapsed = Math.floor((Date.now() - lastFetchRef.current) / 1000);
@@ -192,7 +224,6 @@ export default function Home() {
     return () => clearInterval(ticker);
   }, []);
 
-  // Visibility change: re-fetch if tab was hidden > 1 hour
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -219,9 +250,7 @@ export default function Home() {
                 onClick={() => handleLangChange(l)}
                 disabled={analysisLoading}
                 className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  lang === l
-                    ? "bg-white shadow-sm text-gray-900"
-                    : "text-gray-400 hover:text-gray-600"
+                  lang === l ? "bg-white shadow-sm text-gray-900" : "text-gray-400 hover:text-gray-600"
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {l === "en" ? "EN" : "日本語"}
@@ -231,7 +260,7 @@ export default function Home() {
         </div>
 
         {/* Header */}
-        <header className="flex items-start justify-between mb-8">
+        <header className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
               <span className="text-black">Poli</span>
@@ -248,6 +277,9 @@ export default function Home() {
             </p>
           </div>
         </header>
+
+        {/* Market Ticker */}
+        <MarketTicker quotes={marketQuotes} />
 
         {/* Content */}
         {newsError ? (
@@ -268,7 +300,7 @@ export default function Home() {
           <>
             {isAnalyzing && (
               <p className="text-xs text-center text-gray-400 mb-3 animate-pulse">
-                {lang === "ja" ? "翻訳・分析中..." : "Analyzing..."}
+                {lang === "ja" ? "AIが市場影響度の高いニュースを選定・分析中..." : "AI is selecting and analyzing high-impact news..."}
               </p>
             )}
             <div className="space-y-4">
@@ -279,6 +311,7 @@ export default function Home() {
                   analysis={analyses[i] ?? null}
                   analysisError={analysisErrors[i] ?? false}
                   lang={lang}
+                  companyQuotes={companyQuotes}
                 />
               ))}
             </div>

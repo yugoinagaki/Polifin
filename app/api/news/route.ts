@@ -6,11 +6,12 @@ export async function GET() {
     return NextResponse.json({ error: "NEWS_API_KEY not configured" }, { status: 500 });
   }
 
+  // Fetch 10 candidates — Claude will select the 3 most market-impactful
   const params = new URLSearchParams({
-    q: 'tariff OR Fed OR "interest rate" OR geopolitical OR "trade war" OR sanctions OR "economic security"',
+    q: '(tariff OR sanctions OR "trade war" OR "interest rate" OR "central bank" OR "Fed" OR "military" OR "conflict" OR "energy supply" OR "oil price" OR "semiconductor" OR "currency" OR "bond yield" OR "inflation" OR "GDP" OR "economic security") AND (market OR economy OR stock OR dollar OR trade OR export)',
     language: "en",
     sortBy: "publishedAt",
-    pageSize: "3",
+    pageSize: "10",
     apiKey,
   });
 
