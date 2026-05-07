@@ -13,7 +13,11 @@ async function fetchQuote(symbol: string) {
   const meta = data.chart?.result?.[0]?.meta;
   if (!meta) return null;
   const price = meta.regularMarketPrice as number;
-  const prev = (meta.previousClose ?? meta.chartPreviousClose) as number;
+  const prev = (
+    meta.previousClose ??
+    meta.chartPreviousClose ??
+    meta.regularMarketPreviousClose
+  ) as number;
   if (!price || !prev) return null;
   const change = price - prev;
   const changePct = (change / prev) * 100;
